@@ -1,0 +1,475 @@
+<!doctype html>
+<html lang="<%= locale %>">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title><%= t('panel.flow.title') %></title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="<%= typeof basePath !== 'undefined' ? basePath : '' %>/style.css">
+</head>
+<body class="min-h-screen bg-slate-100">
+  <%
+    const viewerMode = !!readOnly;
+    const T = (k, v) => t('panel.' + k, v);
+    const dateLocale = { de: 'de-DE', tr: 'tr-TR', en: 'en-GB' }[locale] || 'de-DE';
+    const fmtSaat = (raw) => {
+      const parts = String(raw || "").split(":");
+      const h = parseInt(parts[0], 10) || 0;
+      const m = parseInt(parts[1], 10) || 0;
+      return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+    };
+    const fmtTarih = (raw) => {
+      if (raw instanceof Date) {
+        return `${raw.getFullYear()}-${String(raw.getMonth() + 1).padStart(2, "0")}-${String(raw.getDate()).padStart(2, "0")}`;
+      }
+      return String(raw || "").slice(0, 10);
+    };
+    const flowData = entries.map((e) => ({
+      id: Number(e.id),
+      d: fmtTarih(e.tarih),
+      s: fmtSaat(e.saat_baslangic != null ? e.saat_baslangic : e.saat),
+      e: fmtSaat(e.saat_bitis != null ? e.saat_bitis : e.saat),
+      a: e.aksiyon || "",
+      n: e.aciklama || "",
+      p: e.sahis || ""
+    }));
+    const safeJson = (v) =>
+      JSON.stringify(v).replace(/</g, "\\u003c").split(String.fromCharCode(0x2028)).join("\\u2028").split(String.fromCharCode(0x2029)).join("\\u2029");
+  %>
+  <%- include('partials/nav', { username, readOnly }) %>
+
+  <main class="gl-page ga-page">
+    <header class="gl-head">
+      <div>
+        <h1 class="gl-title"><%= T('flow.title') %></h1>
+        <p class="gl-sub" id="gaHeadSub"></p>
+      </div>
+      <div class="gl-head-actions">
+        <button type="button" class="gl-btn" id="gaPrint"><%= T('flow.print') %></button>
+        <% if (!viewerMode) { %><button type="button" class="gl-btn gl-btn-primary" id="gaAdd"><%= T('flow.addBtn') %></button><% } %>
+      </div>
+    </header>
+
+    <% if (error) { %><p class="gl-dialog-error"><%= error %></p><% } %>
+
+    <section class="gl-panel ga-panel">
+      <div class="gl-toolbar">
+        <div class="gl-search">
+          <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="4.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="m10.5 10.5 3.5 3.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+          <input type="search" id="gaSearch" placeholder="<%= T('flow.searchPlaceholder') %>" autocomplete="off" spellcheck="false" aria-label="<%= T('flow.searchAria') %>">
+        </div>
+        <button type="button" class="gl-btn gl-btn-ghost" id="gaReset" hidden><%= T('common.resetFilters') %></button>
+      </div>
+      <div class="gl-chiprow ga-chiprow">
+        <div class="gl-chips" role="group" aria-label="<%= T('flow.dayAria') %>">
+          <span class="gl-chips-label"><%= T('flow.dayLabel') %></span>
+          <span class="ga-chiplist" id="gaDays"></span>
+        </div>
+        <div class="gl-chips" role="group" aria-label="<%= T('flow.personAria') %>" id="gaPersonsWrap">
+          <span class="gl-chips-label"><%= T('flow.personLabel') %></span>
+          <span class="ga-chiplist" id="gaPersons"></span>
+        </div>
+      </div>
+    </section>
+
+    <div id="gaTimeline"></div>
+  </main>
+
+  <% if (!viewerMode) { %>
+  <dialog class="gl-dialog" id="gaEdit">
+    <form id="gaEditForm" novalidate>
+      <h2 id="gaEditTitle"><%= T('flow.editTitle') %></h2>
+      <label><%= T('flow.action') %><input type="text" name="aksiyon" required maxlength="120" autocomplete="off" placeholder="<%= T('flow.actionPlaceholder') %>"></label>
+      <div class="ga-dialog-grid">
+        <label><%= T('flow.date') %><input type="date" name="tarih" required></label>
+        <label><%= T('flow.start') %><input type="time" name="saat_baslangic" required></label>
+        <label><%= T('flow.end') %><input type="time" name="saat_bitis" required></label>
+      </div>
+      <label><%= T('flow.person') %><input type="text" name="sahis" maxlength="120" autocomplete="off" list="gaPersonList" placeholder="<%= T('flow.personPlaceholder') %>"></label>
+      <label><%= T('flow.desc') %><textarea name="aciklama" maxlength="500" rows="3" placeholder="<%= T('flow.descPlaceholder') %>"></textarea></label>
+      <label class="gl-check" id="gaAddMoreWrap" hidden><input type="checkbox" id="gaAddMore"><span><%= T('flow.addMore') %></span></label>
+      <p class="gl-dialog-error" id="gaEditError" hidden></p>
+      <div class="gl-dialog-actions">
+        <button type="button" class="gl-btn" id="gaEditCancel"><%= T('common.cancel') %></button>
+        <button type="submit" class="gl-btn gl-btn-primary" id="gaEditSave"><%= T('common.save') %></button>
+      </div>
+    </form>
+    <datalist id="gaPersonList"></datalist>
+  </dialog>
+  <% } %>
+
+  <div class="gl-toast" id="glToast" role="status" aria-live="polite"></div>
+
+  <script>
+  (() => {
+    // Uygulama bir alt klasorde (or. /anil) calisiyorsa tum adresler bu on ekle kurulur.
+    const BASE = <%- safeJson(typeof basePath !== "undefined" ? String(basePath || "") : "") %>;
+    const atPath = (url, p) => url.pathname.replace(/\/+$/, '') === (BASE + p).replace(/\/+$/, '');
+    const ENTRIES = <%- safeJson(flowData) %>;
+    const I18N = <%- safeJson(i18n.panel) %>;
+    const LOCALE = <%- safeJson(locale) %>;
+    const DATE_LOCALE = <%- safeJson(dateLocale) %>;
+    // tx('list.saved') -> metin; {{ad}} yer tutuculari vars ile doldurulur.
+    const tx = (key, vars) => {
+      const s = key.split('.').reduce((a, k) => (a && a[k] != null ? a[k] : undefined), I18N);
+      return s == null ? key : String(s).replace(/\{\{(\w+)\}\}/g, (_, n) => (vars && vars[n] != null ? String(vars[n]) : ''));
+    };
+    const READ_ONLY = <%= viewerMode ? "true" : "false" %>;
+    const STORE_KEY = 'gunAkisiState.v1' + BASE;
+    const FLASH_KEY = STORE_KEY + '.flash';
+    const PALETTE = ['#4f46e5', '#0d9488', '#d97706', '#e11d48', '#7c3aed', '#0284c7', '#65a30d', '#c026d3'];
+    const $ = (id) => document.getElementById(id);
+    const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    const norm = (s) => String(s ?? '').toLocaleLowerCase('tr').normalize('NFD').replace(/\p{M}/gu, '').replace(/ı/g, 'i');
+    const pad = (n) => String(n).padStart(2, '0');
+    const toMin = (hhmm) => { const [h, m] = String(hhmm).split(':').map(Number); return (h || 0) * 60 + (m || 0); };
+    const fromMin = (min) => `${pad(Math.floor(Math.min(min, 1439) / 60))}:${pad(Math.min(min, 1439) % 60)}`;
+    const fmtDur = (min) => {
+      const h = Math.floor(min / 60);
+      const m = min % 60;
+      return [h ? `${h} ${tx('flow.durH')}` : '', m ? `${m} ${tx('flow.durM')}` : ''].filter(Boolean).join(' ');
+    };
+    const todayStr = () => { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; };
+    const dateOf = (str) => { const [y, m, d] = str.split('-').map(Number); return new Date(y, m - 1, d); };
+    const dayDiff = (str) => Math.round((dateOf(str) - dateOf(todayStr())) / 86400000);
+    const dayRel = (str) => {
+      const n = dayDiff(str);
+      return n === 0 ? tx('flow.today') : n === 1 ? tx('flow.tomorrow') : n === -1 ? tx('flow.yesterday') : n > 0 ? tx('flow.inDays', { n }) : tx('flow.daysAgo', { n: -n });
+    };
+    // "Ayse, Mehmet / Foto ekibi" gibi alanlari tek tek kisilere ayirir.
+    const personsOf = (e) => (e._p ??= String(e.p || '').split(/[,;\/&+]|\s+ve\s+/i).map((x) => x.trim()).filter(Boolean));
+
+    const st = { day: null, person: '', q: '' };
+    try {
+      const saved = JSON.parse(sessionStorage.getItem(STORE_KEY) || 'null');
+      if (saved && typeof saved === 'object') Object.assign(st, { day: saved.day ?? null, person: saved.person || '', q: saved.q || '' });
+    } catch (_) {}
+    const persist = () => { try { sessionStorage.setItem(STORE_KEY, JSON.stringify(st)); } catch (_) {} };
+
+    function toast(msg, isError) {
+      const el = $('glToast');
+      el.textContent = msg;
+      el.classList.toggle('is-error', !!isError);
+      el.classList.add('is-visible');
+      clearTimeout(toast.t);
+      toast.t = setTimeout(() => el.classList.remove('is-visible'), isError ? 4500 : 2200);
+    }
+    async function api(url, method, body) {
+      const res = await fetch(BASE + url, {
+        method,
+        headers: body ? { 'Content-Type': 'application/json' } : undefined,
+        body: body ? JSON.stringify(body) : undefined
+      });
+      const isJson = (res.headers.get('content-type') || '').includes('application/json');
+      const data = isJson ? await res.json() : { success: false, message: tx('common.invalidResponse') };
+      if (res.status === 401) { location.href = BASE + '/login'; throw new Error(tx('common.sessionExpired')); }
+      if (!res.ok || !data.success) throw new Error(data.message || tx('common.failed'));
+      return data;
+    }
+
+    /* ---------- Hesaplanan bilgiler ---------- */
+    const sortEntries = () => ENTRIES.sort((a, b) => a.d.localeCompare(b.d) || a.s.localeCompare(b.s) || a.e.localeCompare(b.e) || a.id - b.id);
+    const dayList = () => [...new Set(ENTRIES.map((e) => e.d))].sort();
+    function personIndex() {
+      const map = new Map();
+      for (const e of ENTRIES) for (const p of personsOf(e)) {
+        const key = norm(p);
+        const item = map.get(key) || { key, label: p, n: 0 };
+        item.n += 1;
+        map.set(key, item);
+      }
+      const list = [...map.values()].sort((a, b) => a.label.localeCompare(b.label, LOCALE, { sensitivity: 'base' }));
+      list.forEach((p, i) => { p.color = PALETTE[i % PALETTE.length]; });
+      return list;
+    }
+    // Ayni kisi ayni saatte iki ayri kayitta geciyorsa cakisma sayilir.
+    function findConflicts() {
+      const out = new Map();
+      const add = (e, other, person) => {
+        const list = out.get(e.id) || [];
+        list.push(`${person}: ${other.s} ${other.a}`);
+        out.set(e.id, list);
+      };
+      for (let i = 0; i < ENTRIES.length; i += 1) {
+        const a = ENTRIES[i];
+        const aEnd = Math.max(toMin(a.e), toMin(a.s) + 1);
+        for (let j = i + 1; j < ENTRIES.length && ENTRIES[j].d === a.d; j += 1) {
+          const b = ENTRIES[j];
+          if (toMin(b.s) >= aEnd) break;
+          const bKeys = new Set(personsOf(b).map(norm));
+          for (const p of personsOf(a)) if (bKeys.has(norm(p))) { add(a, b, p); add(b, a, p); }
+        }
+      }
+      return out;
+    }
+    function defaultDay(days) {
+      const today = todayStr();
+      return days.find((d) => d >= today) || days[days.length - 1] || '';
+    }
+
+    /* ---------- Cizim ---------- */
+    let people = [];
+    function renderFilters() {
+      const days = dayList();
+      if (st.day === null || (st.day && !days.includes(st.day))) st.day = defaultDay(days);
+      people = personIndex();
+      if (st.person && !people.some((p) => p.key === st.person)) st.person = '';
+
+      const dayChip = (value, label, count, title) =>
+        `<button type="button" class="gl-chip${st.day === value ? ' is-active' : ''}" data-day="${value}"${title ? ` title="${esc(title)}"` : ''}>${label} <b>${count}</b></button>`;
+      $('gaDays').innerHTML = (days.length > 1 ? dayChip('', esc(tx('flow.allDays')), ENTRIES.length) : '') + days.map((d) => {
+        const label = dateOf(d).toLocaleDateString(DATE_LOCALE, { weekday: 'short', day: 'numeric', month: 'short' });
+        return dayChip(d, esc(label), ENTRIES.filter((e) => e.d === d).length, dayRel(d));
+      }).join('');
+
+      $('gaPersonsWrap').hidden = people.length === 0;
+      $('gaPersons').innerHTML = `<button type="button" class="gl-chip${st.person ? '' : ' is-active'}" data-person="">${esc(tx('flow.everyone'))}</button>` +
+        people.map((p) => `<button type="button" class="gl-chip${st.person === p.key ? ' is-active' : ''}" data-person="${esc(p.key)}"><i class="ga-swatch" style="background:${p.color}"></i>${esc(p.label)} <b>${p.n}</b></button>`).join('');
+      const dl = $('gaPersonList');
+      if (dl) dl.innerHTML = people.map((p) => `<option value="${esc(p.label)}">`).join('');
+    }
+
+    function itemHtml(e, state, conflicts, nextIn) {
+      const persons = personsOf(e);
+      const color = (people.find((p) => p.key === norm(persons[0] || '')) || {}).color || '#94a3b8';
+      const dur = toMin(e.e) - toMin(e.s);
+      const conflict = conflicts.get(e.id);
+      const badges = [
+        state === 'now' ? `<span class="ga-badge now">${esc(tx('flow.now'))}</span>` : '',
+        state === 'next' && nextIn != null ? `<span class="ga-badge next">${esc(nextIn > 0 ? tx('flow.inTime', { t: fmtDur(nextIn) }) : tx('flow.startingNow'))}</span>` : '',
+        dur > 0 ? `<span class="ga-badge">${fmtDur(dur)}</span>` : '',
+        conflict ? `<span class="ga-badge warn" title="${esc(conflict.join('\n'))}">${esc(tx('flow.conflict'))}</span>` : ''
+      ].join('');
+      const chips = persons.map((p) => {
+        const info = people.find((x) => x.key === norm(p));
+        return `<button type="button" class="ga-person" data-person="${esc(norm(p))}" title="${esc(tx('flow.onlyPerson', { name: p }))}"><i class="ga-swatch" style="background:${info ? info.color : '#94a3b8'}"></i>${esc(p)}</button>`;
+      }).join('');
+      const actions = READ_ONLY ? '' : `<div class="ga-actions"><button type="button" class="gl-act" data-act="edit">${esc(tx('common.edit'))}</button><button type="button" class="gl-act danger" data-act="del">${esc(tx('common.delete'))}</button></div>`;
+      return `<li class="ga-item${state ? ' is-' + state : ''}" data-id="${e.id}" style="--ga-c:${color}">
+        <div class="ga-time"><b>${e.s}</b>${e.e !== e.s ? `<span>${e.e}</span>` : ''}</div>
+        <div class="ga-rail"><i></i></div>
+        <div class="ga-card">
+          <div class="ga-card-head"><h3>${esc(e.a)}</h3><div class="ga-badges">${badges}</div></div>
+          ${e.n ? `<p class="ga-desc">${esc(e.n)}</p>` : ''}
+          ${conflict ? `<p class="ga-conflict">${esc(tx('flow.sameTime', { list: conflict.join(' · ') }))}</p>` : ''}
+          ${chips || actions ? `<div class="ga-card-foot"><div class="ga-persons">${chips}</div>${actions}</div>` : ''}
+        </div>
+      </li>`;
+    }
+
+    function render() {
+      sortEntries();
+      renderFilters();
+      const conflicts = findConflicts();
+      const tokens = norm(st.q).split(/\s+/).filter(Boolean);
+      const isFiltered = !!(st.person || tokens.length);
+      const match = (e) => {
+        if (st.person && !personsOf(e).some((p) => norm(p) === st.person)) return false;
+        if (tokens.length) { const h = norm([e.a, e.n, e.p, e.s, e.e].join(' ')); if (!tokens.every((t) => h.includes(t))) return false; }
+        return true;
+      };
+      const days = dayList().filter((d) => !st.day || d === st.day);
+      const today = todayStr();
+      const now = new Date();
+      const nowMin = now.getHours() * 60 + now.getMinutes();
+      let shown = 0;
+
+      const html = days.map((d) => {
+        const all = ENTRIES.filter((e) => e.d === d);
+        const list = all.filter(match);
+        if (!list.length) return '';
+        shown += list.length;
+        const isToday = d === today;
+        const nextEntry = isToday ? all.find((e) => toMin(e.s) > nowMin) : null;
+        const anyNow = isToday && all.some((e) => toMin(e.s) <= nowMin && nowMin < toMin(e.e));
+        let rows = '';
+        let prevEnd = null;
+        let nowLineDone = !isToday || anyNow;
+        for (const e of list) {
+          const s = toMin(e.s);
+          const end = Math.max(toMin(e.e), s);
+          if (!nowLineDone && s > nowMin) {
+            rows += `<li class="ga-nowline"><span>${esc(tx('flow.nowLine', { time: fromMin(nowMin) }))}</span></li>`;
+            nowLineDone = true;
+          } else if (!isFiltered && prevEnd != null && s - prevEnd >= 15) {
+            rows += `<li class="ga-gap"><span>${esc(tx('flow.gap', { t: fmtDur(s - prevEnd) }))}</span></li>`;
+          }
+          const state = !isToday ? '' : (s <= nowMin && nowMin < end) ? 'now' : (end <= nowMin ? 'past' : (e === nextEntry ? 'next' : ''));
+          rows += itemHtml(e, state, conflicts, e === nextEntry ? s - nowMin : null);
+          prevEnd = prevEnd == null ? end : Math.max(prevEnd, end);
+        }
+        if (!nowLineDone) rows += `<li class="ga-nowline"><span>${esc(tx('flow.nowLine', { time: fromMin(nowMin) }))}</span></li>`;
+        const title = dateOf(d).toLocaleDateString(DATE_LOCALE, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+        const span = `${all[0].s} – ${fromMin(Math.max(...all.map((e) => toMin(e.e))))}`;
+        return `<section class="ga-day${isToday ? ' is-today' : ''}">
+          <header class="ga-day-head">
+            <h2>${esc(title)}</h2>
+            <span class="ga-day-rel">${dayRel(d)}</span>
+            <span class="ga-day-meta">${list.length}${list.length !== all.length ? ' / ' + all.length : ''} ${esc(tx('flow.entriesWord'))} · ${span}</span>
+          </header>
+          <ol class="ga-list">${rows}</ol>
+        </section>`;
+      }).join('');
+
+      const empty = ENTRIES.length
+        ? `<div class="gl-panel gl-empty"><p>${esc(tx('flow.emptyFiltered'))}</p><button type="button" class="gl-btn" data-reset>${esc(tx('common.resetFilters'))}</button></div>`
+        : `<div class="gl-panel gl-empty"><p>${esc(tx('flow.emptyNone'))}</p>${READ_ONLY ? '' : `<button type="button" class="gl-btn gl-btn-primary" data-add>${esc(tx('flow.addFirst'))}</button>`}</div>`;
+      $('gaTimeline').innerHTML = shown ? html : empty;
+
+      const dayCount = dayList().length;
+      const conflictCount = conflicts.size;
+      $('gaHeadSub').textContent = `${ENTRIES.length} ${tx('flow.entriesWord')} · ${dayCount} ${tx('flow.daysWord')}` + (conflictCount ? ` · ${tx('flow.conflictsNote', { n: conflictCount })}` : '') + (READ_ONLY ? ` · ${tx('flow.readOnlyNote')}` : '');
+      $('gaReset').hidden = !isFiltered;
+      persist();
+    }
+    function setFilter(patch) { Object.assign(st, patch); render(); }
+    function resetFilters() { $('gaSearch').value = ''; setFilter({ person: '', q: '' }); }
+
+    /* ---------- Olaylar ---------- */
+    const search = $('gaSearch');
+    search.value = st.q;
+    search.addEventListener('input', () => setFilter({ q: search.value }));
+    document.addEventListener('keydown', (e) => {
+      if (e.key === '/' && !/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName || '')) { e.preventDefault(); search.focus(); search.select(); }
+    });
+    $('gaReset').addEventListener('click', resetFilters);
+    $('gaDays').addEventListener('click', (e) => {
+      const chip = e.target.closest('[data-day]');
+      if (chip) setFilter({ day: chip.dataset.day });
+    });
+    $('gaPersons').addEventListener('click', (e) => {
+      const chip = e.target.closest('[data-person]');
+      if (chip) setFilter({ person: st.person === chip.dataset.person ? '' : chip.dataset.person });
+    });
+    $('gaPrint').addEventListener('click', () => window.print());
+
+    $('gaTimeline').addEventListener('click', async (e) => {
+      if (e.target.closest('[data-reset]')) return resetFilters();
+      if (e.target.closest('[data-add]')) return openEdit(null);
+      const personBtn = e.target.closest('.ga-person');
+      if (personBtn) return setFilter({ person: st.person === personBtn.dataset.person ? '' : personBtn.dataset.person });
+      const btn = e.target.closest('[data-act]');
+      if (!btn) return;
+      const entry = ENTRIES.find((x) => x.id === Number(btn.closest('.ga-item').dataset.id));
+      if (!entry) return;
+      if (btn.dataset.act === 'edit') return openEdit(entry);
+      if (!confirm(tx('flow.confirmDelete', { title: `${entry.s} ${entry.a}` }))) return;
+      try {
+        await api(`/api/gun-akisi/${entry.id}`, 'DELETE');
+        ENTRIES.splice(ENTRIES.indexOf(entry), 1);
+        render();
+        toast(tx('flow.deleted'));
+      } catch (err) {
+        toast(err.message, true);
+      }
+    });
+
+    /* ---------- Ekleme / duzenleme penceresi ---------- */
+    const dlg = $('gaEdit');
+    let editing = null;
+    function openEdit(entry) {
+      if (!dlg) return;
+      editing = entry;
+      const f = $('gaEditForm');
+      // Yeni kayit: secili gun ve o gunun son bitis saati onerilir.
+      const day = entry ? entry.d : (st.day || defaultDay(dayList()) || todayStr());
+      const sameDay = ENTRIES.filter((x) => x.d === day);
+      const lastEnd = sameDay.length ? Math.max(...sameDay.map((x) => toMin(x.e))) : 9 * 60;
+      f.elements.aksiyon.value = entry ? entry.a : '';
+      f.elements.tarih.value = day;
+      f.elements.saat_baslangic.value = entry ? entry.s : fromMin(lastEnd);
+      f.elements.saat_bitis.value = entry ? entry.e : fromMin(lastEnd + 30);
+      f.elements.sahis.value = entry ? entry.p : '';
+      f.elements.aciklama.value = entry ? entry.n : '';
+      $('gaEditTitle').textContent = entry ? tx('flow.editTitle') : tx('flow.newTitle');
+      $('gaAddMoreWrap').hidden = !!entry;
+      $('gaEditError').hidden = true;
+      if (!dlg.open) dlg.showModal();
+      f.elements.aksiyon.focus();
+    }
+    // Yeni kayit mevcut form adresine (POST /gun-akisi) gonderilir; basarida sunucu ?ok=1 adresine yonlendirir.
+    async function createEntry(body) {
+      const res = await fetch(BASE + '/gun-akisi', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams(body)
+      });
+      const url = new URL(res.url, location.href);
+      if (res.ok && atPath(url, '/gun-akisi') && url.searchParams.get('ok') === '1') return;
+      if (atPath(url, '/login')) { location.href = BASE + '/login'; throw new Error(tx('common.sessionExpired')); }
+      let msg = '';
+      try {
+        const doc = new DOMParser().parseFromString(await res.text(), 'text/html');
+        msg = (doc.querySelector('.gl-dialog-error, .bg-red-100')?.textContent || '').trim();
+      } catch (_) {}
+      throw new Error(msg || tx('flow.addFailed'));
+    }
+    if (dlg) {
+      $('gaAdd').addEventListener('click', () => openEdit(null));
+      $('gaEditCancel').addEventListener('click', () => dlg.close());
+      dlg.addEventListener('click', (e) => { if (e.target === dlg) dlg.close(); });
+      const f = $('gaEditForm');
+      // Baslangic degisince sure korunarak bitis de kayar.
+      let lastStart = '';
+      f.elements.saat_baslangic.addEventListener('focus', () => { lastStart = f.elements.saat_baslangic.value; });
+      f.elements.saat_baslangic.addEventListener('change', () => {
+        const s = f.elements.saat_baslangic.value;
+        const end = f.elements.saat_bitis.value;
+        if (s && end && lastStart) f.elements.saat_bitis.value = fromMin(Math.max(toMin(s), toMin(s) + toMin(end) - toMin(lastStart)));
+        lastStart = s;
+      });
+      f.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const body = {
+          tarih: f.elements.tarih.value,
+          saat_baslangic: f.elements.saat_baslangic.value,
+          saat_bitis: f.elements.saat_bitis.value,
+          aksiyon: f.elements.aksiyon.value.trim(),
+          aciklama: f.elements.aciklama.value.trim(),
+          sahis: f.elements.sahis.value.trim()
+        };
+        const errEl = $('gaEditError');
+        const fail = (msg) => { errEl.textContent = msg; errEl.hidden = false; };
+        if (!body.tarih || !body.saat_baslangic || !body.saat_bitis || !body.aksiyon) return fail(tx('flow.required'));
+        if (body.saat_bitis < body.saat_baslangic) return fail(tx('flow.order'));
+        const saveBtn = $('gaEditSave');
+        saveBtn.disabled = true;
+        try {
+          if (editing) {
+            await api(`/api/gun-akisi/${editing.id}`, 'POST', body);
+            Object.assign(editing, { d: body.tarih, s: body.saat_baslangic, e: body.saat_bitis, a: body.aksiyon, n: body.aciklama, p: body.sahis });
+            delete editing._p;
+            if (st.day && st.day !== body.tarih) st.day = body.tarih;
+            dlg.close();
+            render();
+            toast(tx('flow.saved'));
+          } else {
+            await createEntry(body);
+            st.day = body.tarih;
+            persist();
+            try { sessionStorage.setItem(FLASH_KEY, JSON.stringify({ msg: tx('flow.added', { title: `${body.saat_baslangic} ${body.aksiyon}` }), more: $('gaAddMore').checked })); } catch (_) {}
+            location.href = BASE + '/gun-akisi';
+            return;
+          }
+        } catch (err) {
+          fail(err.message);
+        }
+        saveBtn.disabled = false;
+      });
+    }
+
+    render();
+    try {
+      const flash = JSON.parse(sessionStorage.getItem(FLASH_KEY) || 'null');
+      sessionStorage.removeItem(FLASH_KEY);
+      if (flash) {
+        toast(flash.msg);
+        if (flash.more && dlg) { openEdit(null); $('gaAddMore').checked = true; }
+      }
+    } catch (_) {}
+    // "Su an" isaretleri dakikada bir guncellenir.
+    setInterval(() => { if (!(dlg && dlg.open) && dayList().includes(todayStr())) render(); }, 60000);
+  })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,258 @@
+<!doctype html>
+<html lang="<%= locale %>">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title><%= t('meta.title') %></title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="<%= basePath %>/style.css">
+</head>
+<body class="rsvp-page">
+  <main class="max-w-lg mx-auto p-4 sm:p-8">
+    <section class="rsvp-card rounded-3xl overflow-hidden">
+      <div class="rsvp-header px-6 py-8 text-center text-white relative">
+        <nav class="rsvp-lang-switch" aria-label="Language">
+          <% ['de', 'tr', 'en'].forEach((code, i) => { %>
+          <% if (i > 0) { %><span class="rsvp-lang-sep" aria-hidden="true">|</span><% } %>
+          <a href="<%= basePath %>/davet/<%= token %>?lang=<%= code %><%= submitted ? '&ok=1' : '' %>" lang="<%= code %>" class="rsvp-lang-btn<%= locale === code ? ' is-active' : '' %>"<%- locale === code ? ' aria-current="true"' : '' %>><%= t('lang.' + code) %></a>
+          <% }) %>
+        </nav>
+        <p class="rsvp-header-badge text-sm uppercase"><%= t('rsvp.headerBadge') %></p>
+        <h1 class="rsvp-header-title text-3xl sm:text-4xl mt-2">Aylina &amp; Yunus</h1>
+        <p class="rsvp-header-date mt-2 text-xl">21.08.2027</p>
+        <p class="rsvp-header-intro mt-3 text-sm"><%= t('rsvp.intro') %></p>
+      </div>
+
+      <div class="px-6 py-6 space-y-5">
+        <% if (submitted) { %>
+        <div class="rsvp-alert rsvp-alert-success">
+          <%= t('rsvp.successPage') %>
+        </div>
+        <% } %>
+
+        <div id="rsvpError" class="hidden rsvp-alert rsvp-alert-error"></div>
+        <div id="rsvpSuccess" class="hidden rsvp-alert rsvp-alert-success"></div>
+
+        <form id="rsvpForm" class="space-y-5" novalidate>
+          <input type="hidden" id="guestId" name="guest_id" value="<%= guest.id %>">
+
+          <div class="rsvp-guest-card">
+            <p class="rsvp-guest-label"><%= t('rsvp.guestLabel') %></p>
+            <p id="selectedGuestName" class="rsvp-guest-name"><%= guest.name %></p>
+          </div>
+
+          <fieldset class="rsvp-choice">
+            <legend class="rsvp-question"><%= t('rsvp.choiceTitle') %></legend>
+            <div class="rsvp-choice-options">
+              <label class="rsvp-choice-option">
+                <input type="radio" name="attendance" value="yes" class="rsvp-choice-input">
+                <span class="rsvp-choice-mark" aria-hidden="true">&#10003;</span>
+                <span class="rsvp-choice-text"><%= t('rsvp.choiceYes') %></span>
+              </label>
+              <label class="rsvp-choice-option rsvp-choice-option-no">
+                <input type="radio" name="attendance" value="no" class="rsvp-choice-input">
+                <span class="rsvp-choice-mark" aria-hidden="true">&#10007;</span>
+                <span class="rsvp-choice-text"><%= t('rsvp.choiceNo') %></span>
+              </label>
+            </div>
+          </fieldset>
+
+          <div id="partySizeWrap" hidden>
+            <label for="partySize" class="rsvp-question"><%= t('rsvp.partySizeLabel') %></label>
+            <select id="partySize" name="party_size" class="rsvp-input w-full"></select>
+          </div>
+
+          <div>
+            <label for="rsvpNote" class="rsvp-question"><%= t('rsvp.noteLabel') %></label>
+            <textarea
+              id="rsvpNote"
+              name="note"
+              class="rsvp-input w-full min-h-[5rem] resize-y"
+              maxlength="500"
+              placeholder="<%= t('rsvp.notePlaceholder') %>"
+            ><%= guest.rsvp_note || '' %></textarea>
+          </div>
+
+          <button type="submit" id="rsvpSubmit" class="rsvp-submit w-full">
+            <%= t('rsvp.submit') %>
+          </button>
+        </form>
+
+        <div id="calendarSuggest" class="rsvp-calendar-suggest space-y-3" hidden>
+          <div>
+            <p class="rsvp-calendar-title"><%= t('rsvp.calendarTitle') %></p>
+            <p class="rsvp-calendar-meta"><%= calendar.title %> · 21.08.2027 · 16:00 – 23:00</p>
+          </div>
+          <div class="rsvp-calendar-actions">
+            <a id="googleCalendarBtn" class="rsvp-calendar-btn" href="#" target="_blank" rel="noopener noreferrer"><%= t('rsvp.googleCalendar') %></a>
+            <a class="rsvp-calendar-btn rsvp-calendar-btn-secondary" href="<%= basePath %>/davet/<%= token %>/takvim.ics"><%= t('rsvp.downloadIcs') %></a>
+          </div>
+        </div>
+
+        <% if (guest.rsvp_at) { %>
+        <p class="rsvp-footer-note">
+          <%= t('rsvp.lastUpdate') %> <%= new Date(guest.rsvp_at).toLocaleString(dateLocale) %>
+        </p>
+        <% } %>
+      </div>
+    </section>
+  </main>
+
+  <script>
+  const TOKEN = <%- JSON.stringify(token) %>;
+  const INITIAL_GUEST = <%- JSON.stringify({ id: guest.id, name: guest.name, status: guest.status, party_size: guest.party_size }) %>;
+  const WEDDING_CALENDAR = <%- JSON.stringify(calendar) %>;
+  const SHOW_CALENDAR_INIT = <%= showCalendar ? 'true' : 'false' %>;
+  const I18N = <%- JSON.stringify(i18n.rsvp) %>;
+  const MAX_PARTY_SIZE = 5;
+  const guestIdInput = document.getElementById('guestId');
+  const choiceInputs = Array.from(document.querySelectorAll('input[name="attendance"]'));
+  const partySizeWrap = document.getElementById('partySizeWrap');
+  const partySizeSelect = document.getElementById('partySize');
+  const selectedGuestName = document.getElementById('selectedGuestName');
+  const rsvpForm = document.getElementById('rsvpForm');
+  const rsvpError = document.getElementById('rsvpError');
+  const rsvpSuccess = document.getElementById('rsvpSuccess');
+  const calendarSuggest = document.getElementById('calendarSuggest');
+  const googleCalendarBtn = document.getElementById('googleCalendarBtn');
+  const submitBtn = document.getElementById('rsvpSubmit');
+
+  function googleCalendarUrl() {
+    const params = new URLSearchParams({
+      action: 'TEMPLATE',
+      text: WEDDING_CALENDAR.title,
+      dates: `${WEDDING_CALENDAR.date}T${WEDDING_CALENDAR.start}/${WEDDING_CALENDAR.date}T${WEDDING_CALENDAR.end}`,
+      ctz: WEDDING_CALENDAR.timezone
+    });
+    return `https://calendar.google.com/calendar/render?${params.toString()}`;
+  }
+
+  if (googleCalendarBtn) {
+    googleCalendarBtn.href = googleCalendarUrl();
+  }
+
+  // Kisi sayisi bos ("Seciniz") baslar; davetli bilerek secer.
+  function buildPartySizeOptions(selectedValue) {
+    partySizeSelect.replaceChildren();
+    const empty = document.createElement('option');
+    empty.value = '';
+    empty.textContent = I18N.partySizeSelect;
+    partySizeSelect.appendChild(empty);
+    for (let i = 1; i <= MAX_PARTY_SIZE; i += 1) {
+      const opt = document.createElement('option');
+      opt.value = String(i);
+      opt.textContent = i === 1 ? I18N.personCountOne : I18N.personCount.replace('{{n}}', String(i));
+      partySizeSelect.appendChild(opt);
+    }
+    partySizeSelect.value = selectedValue >= 1 && selectedValue <= MAX_PARTY_SIZE ? String(selectedValue) : '';
+  }
+
+  // 'yes' | 'no' | '' (henuz secilmedi)
+  function currentChoice() {
+    const checked = choiceInputs.find((input) => input.checked);
+    return checked ? checked.value : '';
+  }
+
+  // Secime gore: kisi sayisi alani, buton metni ve takvim kutusu.
+  function applyChoice() {
+    const choice = currentChoice();
+    partySizeWrap.hidden = choice !== 'yes';
+    if (calendarSuggest) calendarSuggest.hidden = choice !== 'yes';
+    submitBtn.textContent = choice === 'no' ? I18N.submitDecline : I18N.submit;
+  }
+
+  function setChoice(choice) {
+    choiceInputs.forEach((input) => { input.checked = input.value === choice; });
+    applyChoice();
+  }
+
+  function showError(msg) {
+    rsvpError.textContent = msg;
+    rsvpError.classList.remove('hidden');
+    rsvpSuccess.classList.add('hidden');
+    rsvpError.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+  function showSuccess(msg) {
+    rsvpSuccess.textContent = msg;
+    rsvpSuccess.classList.remove('hidden');
+    rsvpError.classList.add('hidden');
+    rsvpSuccess.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+  function clearMessages() {
+    rsvpError.classList.add('hidden');
+    rsvpSuccess.classList.add('hidden');
+  }
+
+  const initialSize = Number(INITIAL_GUEST.party_size || 0);
+  buildPartySizeOptions(initialSize);
+  if (Number(INITIAL_GUEST.status) === 3) {
+    setChoice('no');
+  } else if (SHOW_CALENDAR_INIT || initialSize > 0) {
+    setChoice('yes');
+  } else {
+    setChoice('');
+  }
+
+  choiceInputs.forEach((input) => input.addEventListener('change', () => {
+    clearMessages();
+    applyChoice();
+  }));
+  partySizeSelect.addEventListener('change', clearMessages);
+
+  rsvpForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    clearMessages();
+    const choice = currentChoice();
+    if (!choice) {
+      showError(I18N.chooseFirst);
+      return;
+    }
+    const decline = choice === 'no';
+    const partySize = decline ? 0 : Number(partySizeSelect.value || 0);
+    if (!decline && !partySize) {
+      showError(I18N.choosePartySize);
+      partySizeSelect.focus();
+      return;
+    }
+    const guestId = Number(guestIdInput.value || INITIAL_GUEST.id);
+    const note = document.getElementById('rsvpNote').value.trim();
+    submitBtn.disabled = true;
+    submitBtn.textContent = I18N.saving;
+    try {
+      const res = await fetch(`<%= typeof basePath !== 'undefined' ? basePath : '' %>/api/rsvp/${TOKEN}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          guest_id: guestId,
+          name: INITIAL_GUEST.name,
+          party_size: partySize,
+          not_attending: decline,
+          note
+        })
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        showError(data.message || I18N.saveFailed);
+        return;
+      }
+      if (data.guest?.name) selectedGuestName.textContent = data.guest.name;
+      if (Number(data.guest?.status) === 3 || Number(data.guest?.party_size) === 0) {
+        setChoice('no');
+      } else if (data.guest) {
+        buildPartySizeOptions(Number(data.guest.party_size || 0));
+        setChoice('yes');
+      }
+      showSuccess(data.message || (decline ? I18N.declineSaved : I18N.attendanceSaved));
+    } catch (err) {
+      showError(I18N.connectionError);
+    } finally {
+      submitBtn.disabled = false;
+      applyChoice();
+    }
+  });
+  </script>
+</body>
+</html>

@@ -1,0 +1,88 @@
+CREATE DATABASE IF NOT EXISTS dbyunus
+  CHARACTER SET utf8mb4
+  COLLATE utf8mb4_unicode_ci;
+
+USE dbyunus;
+
+CREATE TABLE IF NOT EXISTS users (
+  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  username VARCHAR(50) NOT NULL UNIQUE,
+  password_hash VARCHAR(255) NOT NULL,
+  role VARCHAR(20) NOT NULL DEFAULT 'admin',
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+ALTER TABLE users
+  ADD COLUMN IF NOT EXISTS role VARCHAR(20) NOT NULL DEFAULT 'admin';
+
+CREATE TABLE IF NOT EXISTS guests (
+  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  name VARCHAR(120) NOT NULL,
+  phone VARCHAR(30) DEFAULT NULL,
+  email VARCHAR(150) DEFAULT NULL,
+  city VARCHAR(80) DEFAULT NULL,
+  status TINYINT NOT NULL DEFAULT 2,
+  user_id INT UNSIGNED DEFAULT NULL,
+  invite_token VARCHAR(64) DEFAULT NULL,
+  party_size TINYINT UNSIGNED DEFAULT NULL,
+  rsvp_note VARCHAR(500) DEFAULT NULL,
+  rsvp_at TIMESTAMP NULL DEFAULT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY idx_guests_invite_token (invite_token)
+);
+
+ALTER TABLE guests
+  ADD COLUMN IF NOT EXISTS user_id INT UNSIGNED DEFAULT NULL;
+
+ALTER TABLE guests
+  ADD COLUMN IF NOT EXISTS city VARCHAR(80) DEFAULT NULL;
+
+ALTER TABLE guests
+  ADD COLUMN IF NOT EXISTS invite_token VARCHAR(64) DEFAULT NULL;
+
+ALTER TABLE guests
+  ADD UNIQUE INDEX IF NOT EXISTS idx_guests_invite_token (invite_token);
+
+ALTER TABLE guests
+  ADD COLUMN IF NOT EXISTS party_size TINYINT UNSIGNED DEFAULT NULL;
+
+ALTER TABLE guests
+  ADD COLUMN IF NOT EXISTS rsvp_note VARCHAR(500) DEFAULT NULL;
+
+ALTER TABLE guests
+  ADD COLUMN IF NOT EXISTS rsvp_at TIMESTAMP NULL DEFAULT NULL;
+
+INSERT INTO users (username, password_hash, role)
+VALUES (
+  'admin',
+  '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi',
+  'admin'
+)
+ON DUPLICATE KEY UPDATE role = 'admin';
+
+INSERT INTO users (username, password_hash, role)
+VALUES (
+  'enis',
+  '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi',
+  'benutzer'
+)
+ON DUPLICATE KEY UPDATE role = 'benutzer';
+
+INSERT INTO users (username, password_hash, role)
+VALUES (
+  'izleyici',
+  '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi',
+  'viewer'
+)
+ON DUPLICATE KEY UPDATE role = VALUES(role);
+
+CREATE TABLE IF NOT EXISTS gun_akisi (
+  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  tarih DATE NOT NULL,
+  saat_baslangic TIME NOT NULL,
+  saat_bitis TIME NOT NULL,
+  aksiyon VARCHAR(120) NOT NULL,
+  aciklama TEXT DEFAULT NULL,
+  sahis VARCHAR(120) DEFAULT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);

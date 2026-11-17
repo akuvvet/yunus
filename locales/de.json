@@ -5,6 +5,8 @@
   },
   "rsvp": {
     "parents": "Eltern",
+    "route": "Route planen",
+    "routeTitle": "Route in Google Maps berechnen",
     "headerBadge": "PERSÖNLICHE HOCHZEITSEINLADUNG",
     "intro": "Bitte füllen Sie das Formular aus und geben Sie uns Bescheid.",
     "successPage": "Ihre Antwort wurde gespeichert. Vielen Dank!",
@@ -35,7 +37,7 @@
   },
   "calendar": {
     "title": "Hochzeit von Aylina und Yunus",
-    "description": "Hochzeit von Aylina und Yunus - 16:00 - 23:00",
+    "description": "Hochzeit von Aylina und Yunus - 17:00 - 23:00",
     "icsFilename": "aylina-yunus-hochzeit.ics"
   },
   "api": {

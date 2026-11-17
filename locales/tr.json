@@ -5,6 +5,8 @@
   },
   "rsvp": {
     "parents": "Ebeveynler",
+    "route": "Yol tarifi",
+    "routeTitle": "Google Haritalar'da yol tarifi al",
     "headerBadge": "Özel DÜGÜN DAVETIYESI",
     "intro": "Lütfen aşağıdaki formu doldurarak bize haber verin.",
     "successPage": "Yanıtınız kaydedildi. Teşekkür ederiz!",
@@ -35,7 +37,7 @@
   },
   "calendar": {
     "title": "Aylina ve Yunus'un dügünü",
-    "description": "Aylina ve Yunus dugunu - 16:00 - 23:00",
+    "description": "Aylina ve Yunus dugunu - 17:00 - 23:00",
     "icsFilename": "aylina-yunus-dugunu.ics"
   },
   "api": {

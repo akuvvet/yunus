@@ -5,6 +5,8 @@
   },
   "rsvp": {
     "parents": "Parents",
+    "route": "Directions",
+    "routeTitle": "Get directions in Google Maps",
     "headerBadge": "PERSONAL WEDDING INVITATION",
     "intro": "Please fill in the form to let us know whether you can come.",
     "successPage": "Your response has been saved. Thank you!",
@@ -35,7 +37,7 @@
   },
   "calendar": {
     "title": "Wedding of Aylina and Yunus",
-    "description": "Wedding of Aylina and Yunus - 16:00 - 23:00",
+    "description": "Wedding of Aylina and Yunus - 17:00 - 23:00",
     "icsFilename": "aylina-yunus-wedding.ics"
   },
   "api": {

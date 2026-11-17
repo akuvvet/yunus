@@ -98,16 +98,24 @@ function guestLocaleMiddleware(req, res, next) {
   next();
 }
 
+// Dugun salonu: adres, yol tarifi linki ve takvim kaydindaki hatirlatmalar (ICS sure bicimi).
+const WEDDING_VENUE = {
+  location: "Klein-Heipertz 8, 42699 Solingen",
+  reminders: ["P1D", "PT1H"]
+};
+WEDDING_VENUE.mapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(WEDDING_VENUE.location)}`;
+
 function getWeddingCalendar(locale) {
   const t = createTranslator(locale);
   return {
+    ...WEDDING_VENUE,
     title: t("calendar.title"),
     description: t("calendar.description"),
     icsFilename: t("calendar.icsFilename"),
-    date: "20270821",
-    start: "160000",
+    date: "20270925",
+    start: "170000",
     end: "230000",
-    timezone: "Europe/Istanbul"
+    timezone: "Europe/Berlin"
   };
 }
 
